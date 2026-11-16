@@ -93,7 +93,7 @@ export default function CreateFlow({ dashData, kong, setPreviewLines, onDone }) 
       if (svc.comment) s.push('# ' + svc.comment);
       s.push('- host: ' + yamlStr(expandVarRefs(svc.host)));
       if (fieldOn.port && svc.port) s.push('  port: ' + yamlStr(expandVarRefs(svc.port)));
-      if (fieldOn.retries) s.push('  retries: ' + (svc.retries || '0'));
+      if (fieldOn.retries) s.push('  retries: ' + (svc.retries || '5'));
       s.push('  protocol: ' + svc.protocol);
       const clientCertId = tls.clientCertMode === 'new' ? ids.clientCert
         : tls.clientCertMode === 'existing' ? tls.clientCertExistingId.trim() : '';

@@ -33,7 +33,7 @@ export default function ServiceEditForm({ service, dashData, onSave, onCancel, o
     lines = patchScalarField(lines, 'connect_timeout', f.connectTimeout || '600');
     lines = patchScalarField(lines, 'read_timeout', f.readTimeout || '6000');
     lines = patchScalarField(lines, 'write_timeout', f.writeTimeout || '6000');
-    lines = patchScalarField(lines, 'retries', f.retries || '0');
+    lines = patchScalarField(lines, 'retries', f.retries || '5');
     lines = patchScalarField(lines, 'enabled', f.enabled);
     return withComment(service, lines, f.comment);
   }

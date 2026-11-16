@@ -123,7 +123,8 @@ every other item's comment.
   426, path_handling v0, request_buffering and response_buffering true.
 - ✓/✕ toggles next to 13 optional fields drop that field from the output entirely.
 
-**Fallbacks in Service edit:** a blank field saves connect 600, read/write 6000, retries **0** (not 5 as in Create).
+**Blank fields** (Create and Service edit) save connect 600, read/write 6000, retries 5 — the same as the Create
+defaults.
 
 **Field order in Create copies the real files** — keep it when adding fields:
 - Service: host, port, retries, protocol, client_certificate, tls_verify, tls_verify_depth, ca_certificates,
