@@ -1,0 +1,29 @@
+{
+  "name": "kong-config-generator",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "oxlint src",
+    "preview": "vite preview",
+    "test:smoke": "node tests/smoke.mjs"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "oxlint": "^1.90.0",
+    "vite": "^8.3.6",
+    "vite-plugin-singlefile": "^2.3.4"
+  },
+  "description": "Kong Gateway config manager for the Helm charts (single-file React app)",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}
