@@ -115,6 +115,47 @@ reading it.
 For parser changes, also check against the real files: counts above, no overlapping ranges, deleting any item keeps
 every other item's comment.
 
+## Behaviour the code doesn't explain
+
+**Defaults in Create**
+- Service: protocol https, connect_timeout 600, read/write_timeout 6000, retries 5.
+- Route: protocols http only, strip_path true, preserve_host false, regex_priority 100, https_redirect_status_code
+  426, path_handling v0, request_buffering and response_buffering true.
+- ✓/✕ toggles next to 13 optional fields drop that field from the output entirely.
+
+**Fallbacks in Service edit:** a blank field saves connect 600, read/write 6000, retries **0** (not 5 as in Create).
+
+**Field order in Create copies the real files** — keep it when adding fields:
+- Service: host, port, retries, protocol, client_certificate, tls_verify, tls_verify_depth, ca_certificates,
+  enabled, id, path, read_timeout, write_timeout, connect_timeout, name.
+- Route: protocols, service, hosts, preserve_host, snis, destinations, methods, https_redirect_status_code,
+  regex_priority, strip_path, path_handling, headers, request_buffering, response_buffering, name, id, paths, sources.
+
+**Certificate formats** (values file):
+- CA: `- id:` then `cert: |`.
+- Client: `- cert: |-`, then `id:`, then `key: |-`.
+- `configmap.yaml` pulls both lists in with `{{- toYaml .Values.kong_… | nindent 4}}`.
+
+**Detail page**
+- Variables tab shows only variables referenced by the service's host, port or path (route paths aren't checked).
+- Add Certificate: a new cert's ID is generated when the form opens (so the preview shows it). A CA cert is added to
+  the service's `ca_certificates`; a client cert replaces `client_certificate`. Attaching an existing ID that isn't
+  in the file asks for confirmation.
+- Add Plugin scope: this service or one of its routes. Create also offers Global. Plugin config is validated as JSON
+  before saving.
+- New variables show up in the 🔗 dropdowns immediately.
+
+**Ground truth for parser checks (inbound testing):** 135 known IDs (55 services + 55 routes + 22 CA + 3 client).
+All 114 Helm references in the configmap use the full `{{ .Values.kong_services.NAME }}` form.
+
+## Test gaps
+
+`tests/smoke.mjs` doesn't cover these (they were only checked by hand with Playwright in earlier sessions):
+- editing and saving a route, plugin, certificate or variable;
+- adding a plugin;
+- adding a certificate, new and existing;
+- cascade delete keeping a certificate another service still uses.
+
 ## Known issues and next ideas
 
 - The File System Access write path (Chrome on Windows, real disk) has not been tested by an automated test — only
@@ -125,7 +166,11 @@ every other item's comment.
 - Lint warnings: `react-hooks/exhaustive-deps` (preview effects intentionally depend on form state only) and
   `react/refs` (CreateFlow reads `writtenRef`/`idsRef` in render; the re-render comes from `setJustWritten`).
 - The old HTML version had an "Inject into File" tab with a staged diff before writing; not ported (never confirmed
-  it's wanted).
+  it's wanted — still an open question for Moataz).
+- Not supported yet (samples were shared in the chat): a second configmap with Keycloak `jwt_secrets`, and Helm
+  deployment values files (route hostname).
+
+Project history and design decisions: `docs/HISTORY.md`.
 
 ## Working with the user
 
