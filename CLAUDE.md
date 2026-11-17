@@ -105,7 +105,10 @@ npm run test:smoke -- C:\path\to\configmap.yaml C:\path\to\values-testing.yaml
 Needs `npm i -D playwright && npx playwright install chromium` once. Set `CHROME_PATH` to use a specific Chromium.
 The test removes `showDirectoryPicker` to use the manual inputs, then checks: service count, detail tabs, full
 preview, edit + save, 🔗 picker inserts the full reference, two incremental writes in Create (exactly one new service,
-route attached, host unquoted), cascade delete, dashboard delete, Revert. Counts are derived from the files given.
+route attached, host unquoted), cascade delete, dashboard delete, Revert. A second part, on one service picked from
+the files: blank Retries saves 5; edit + save of a route, plugin, certificate and variable; Add Plugin (and refusing
+invalid JSON); Add CA certificate; attaching an existing and an unknown client certificate; cascade delete keeping a
+certificate another service shares. Targets and counts are derived from the files given (28 checks).
 
 Selector gotchas when writing Playwright checks: `text=✎ Edit` also matches "✎ Edit Service"; `includes('path:')`
 also matches `paths:`; `text=Cancel` matched an `<option>CancelPaymentPath`; `.card-body` first is the loader card.
@@ -123,7 +126,8 @@ every other item's comment.
   426, path_handling v0, request_buffering and response_buffering true.
 - ✓/✕ toggles next to 13 optional fields drop that field from the output entirely.
 
-**Fallbacks in Service edit:** a blank field saves connect 600, read/write 6000, retries **0** (not 5 as in Create).
+**Blank fields** (Create and Service edit) save connect 600, read/write 6000, retries 5 — the same as the Create
+defaults.
 
 **Field order in Create copies the real files** — keep it when adding fields:
 - Service: host, port, retries, protocol, client_certificate, tls_verify, tls_verify_depth, ca_certificates,
@@ -150,11 +154,9 @@ All 114 Helm references in the configmap use the full `{{ .Values.kong_services.
 
 ## Test gaps
 
-`tests/smoke.mjs` doesn't cover these (they were only checked by hand with Playwright in earlier sessions):
-- editing and saving a route, plugin, certificate or variable;
-- adding a plugin;
-- adding a certificate, new and existing;
-- cascade delete keeping a certificate another service still uses.
+- `tests/smoke.mjs` has only been run against fake files shaped like the real ones (the real files can't come into
+  a cloud session). Run it against the real inbound/outbound files on the laptop.
+- The File System Access write path (see Known issues) has no automated test.
 
 ## Known issues and next ideas
 
