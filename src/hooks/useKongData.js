@@ -8,10 +8,10 @@
 // synchronously so several writes in a row (e.g. Create writing the service,
 // then the route, then plugins to the same file) never read a stale copy.
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { parseConfigMap, parseValuesFile, normalizeYamlText, injectBlock } from '../lib/yaml.js';
 import { removeRanges } from '../lib/entities.js';
-import { supportsDirPicker, pickProjectRoot, resolveFileHandle, readFile, writeFile } from '../lib/fileSystem.js';
+import { supportsDirPicker, pickProjectRoot, findWorkspaceRoot, resolveFileHandle, readFile, writeFile } from '../lib/fileSystem.js';
 
 const EMPTY_DASH = { services: [], routes: [], plugins: [], caCerts: [], clientCerts: [], variables: [] };
 
@@ -37,6 +37,15 @@ export default function useKongData() {
     setLoadedFiles(files);
     refreshDashData(files);
   }
+
+  // In VS Code, start from the open folder if it holds helm-configuration/.
+  useEffect(() => {
+    findWorkspaceRoot().then((root) => {
+      if (!root) return;
+      setProjectRootHandle((current) => current || root);
+      setStatus(`✓ Using the open folder: ${root.name} — choose Inbound or Outbound`);
+    }).catch(() => {});
+  }, []);
 
   const selectProjectRoot = useCallback(async () => {
     if (!supportsDirPicker) {

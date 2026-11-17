@@ -1,0 +1,27 @@
+{
+  "name": "kong-config-generator",
+  "displayName": "Kong Config Generator",
+  "description": "Manage the Kong Gateway configuration in the Helm charts (configmap.yaml + values-testing.yaml) from inside VS Code.",
+  "version": "1.0.0",
+  "publisher": "kong-config-generator",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": { "type": "git", "url": "https://github.com/Moataz-99/kong-config-generator" },
+  "icon": "icon.png",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      { "command": "kongConfigGenerator.open", "title": "Open", "category": "Kong Config Generator" }
+    ]
+  },
+  "scripts": {
+    "package": "node scripts/copy-webview.mjs && vsce package --skip-license --out ../kong-config-generator.vsix",
+    "test": "node test/bridge.test.mjs"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.0"
+  }
+}

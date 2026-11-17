@@ -3,6 +3,7 @@ import { normId } from '../lib/yaml.js';
 import { computeServiceConnectionCounts, entityDeleteRange, dashItemLabel } from '../lib/entities.js';
 import PluginEditForm from './forms/PluginEditForm.jsx';
 import CertEditForm from './forms/CertEditForm.jsx';
+import { askConfirm } from '../lib/host.js';
 
 // First screen: every service with its connection counts, plus an "Other
 // Configurations" card for global plugins and certificates no service uses.
@@ -36,7 +37,7 @@ export default function Dashboard({ dashData, kong, onOpenService, onDeleteServi
     const arrayName = { plugin: 'plugins', cacert: 'caCerts', clientcert: 'clientCerts' }[type];
     const item = dashData[arrayName][idx];
     const range = entityDeleteRange(type, item);
-    if (!range || !confirm(`Delete ${dashItemLabel(type, item)}?`)) return;
+    if (!range || !(await askConfirm(`Delete ${dashItemLabel(type, item)}?`))) return;
     const fileKey = type === 'plugin' ? 'configmap' : 'values';
     await kong.removeRangesFromFile(fileKey, [range]);
   }

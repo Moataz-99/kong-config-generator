@@ -1,0 +1,61 @@
+# FAKE test values — no real certificates or keys
+replicaCount: 1
+
+kong_ca_certificates:
+# ca-0
+- id: aaaaaaaa-bbbb-4ccc-8ddd-000000000001
+  cert: |
+    -----BEGIN CERTIFICATE-----
+    RkFLRS1URVNULURBVEEtTk9ULUEtUkVBTC011
+    -----END CERTIFICATE-----
+# ca-1
+- id: aaaaaaaa-bbbb-4ccc-8ddd-000000000002
+  cert: |
+    -----BEGIN CERTIFICATE-----
+    RkFLRS1URVNULURBVEEtTk9ULUEtUkVBTC011
+    -----END CERTIFICATE-----
+# ca-2
+- id: aaaaaaaa-bbbb-4ccc-8ddd-000000000003
+  cert: |
+    -----BEGIN CERTIFICATE-----
+    RkFLRS1URVNULURBVEEtTk9ULUEtUkVBTC011
+    -----END CERTIFICATE-----
+# ca-3
+- id: aaaaaaaa-bbbb-4ccc-8ddd-000000000004
+  cert: |
+    -----BEGIN CERTIFICATE-----
+    RkFLRS1URVNULURBVEEtTk9ULUEtUkVBTC011
+    -----END CERTIFICATE-----
+
+kong_client_certificates:
+# client-0
+- cert: |-
+    -----BEGIN CERTIFICATE-----
+    RkFLRS1URVNULURBVEEtTk9ULUEtUkVBTC011
+    -----END CERTIFICATE-----
+  id: aaaaaaaa-bbbb-4ccc-8ddd-000000000005
+  key: |-
+    -----BEGIN PRIVATE KEY-----
+    RkFLRS1URVNULURBVEEtTk9ULUEtUkVBTC011
+    -----END PRIVATE KEY-----
+# client-1
+- cert: |-
+    -----BEGIN CERTIFICATE-----
+    RkFLRS1URVNULURBVEEtTk9ULUEtUkVBTC011
+    -----END CERTIFICATE-----
+  id: aaaaaaaa-bbbb-4ccc-8ddd-000000000006
+  key: |-
+    -----BEGIN PRIVATE KEY-----
+    RkFLRS1URVNULURBVEEtTk9ULUEtUkVBTC011
+    -----END PRIVATE KEY-----
+
+kong_services:
+  svc0host: 10.10.0.1
+  svc1host: 10.10.0.2
+  svc2host: 10.10.0.3
+  svc3host: 10.10.0.4
+  svc4host: 10.10.0.5
+  svc5host: 10.10.0.6
+  svc6host: 10.10.0.7
+  svc7host: 10.10.0.8
+  unusedvar: example.internal

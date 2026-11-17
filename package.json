@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "oxlint src",
     "preview": "vite preview",
-    "test:smoke": "node tests/smoke.mjs"
+    "test:smoke": "node tests/smoke.mjs",
+    "build:vsix": "npm run build && npm --prefix vscode-extension install && npm --prefix vscode-extension run package",
+    "test:vscode": "node vscode-extension/test/bridge.test.mjs"
   },
   "dependencies": {
     "react": "^19.3.1",

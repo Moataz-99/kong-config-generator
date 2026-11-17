@@ -10,6 +10,7 @@ import RouteEditForm from './forms/RouteEditForm.jsx';
 import PluginEditForm from './forms/PluginEditForm.jsx';
 import CertEditForm from './forms/CertEditForm.jsx';
 import VariableEditForm from './forms/VariableEditForm.jsx';
+import { askConfirm, showAlert } from '../lib/host.js';
 
 const TYPE_TO_ARRAY = { route: 'routes', plugin: 'plugins', cacert: 'caCerts', clientcert: 'clientCerts', variable: 'variables' };
 
@@ -53,8 +54,8 @@ export default function ServiceDetail({ dashData, serviceIdx, kong, onBack, onDe
   async function deleteEntity(type, idx) {
     const item = dashData[TYPE_TO_ARRAY[type]][idx];
     const range = entityDeleteRange(type, item);
-    if (!range) { alert('Cannot delete — position not found.'); return; }
-    if (!confirm(`Delete ${dashItemLabel(type, item)}?`)) return;
+    if (!range) { showAlert('Cannot delete — position not found.'); return; }
+    if (!(await askConfirm(`Delete ${dashItemLabel(type, item)}?`))) return;
     const fileKey = type === 'cacert' || type === 'clientcert' || type === 'variable' ? 'values' : 'configmap';
     await kong.removeRangesFromFile(fileKey, [range]);
   }
@@ -85,8 +86,8 @@ export default function ServiceDetail({ dashData, serviceIdx, kong, onBack, onDe
   }
 
   async function saveNewPlugin(name, scope, routeId, comment, configText) {
-    if (!name) { alert('Choose a plugin first.'); return; }
-    try { JSON.parse(configText || '{}'); } catch (e) { alert("Config isn't valid JSON: " + e.message); return; }
+    if (!name) { showAlert('Choose a plugin first.'); return; }
+    try { JSON.parse(configText || '{}'); } catch (e) { showAlert("Config isn't valid JSON: " + e.message); return; }
     const lines = buildNewPluginLines(name, scope, routeId, comment, configText);
     await kong.insertBlockInFile('configmap', 'plugins:', lines.join('\n'), 'list-item', '    ');
     setAdding(null);
@@ -116,10 +117,10 @@ export default function ServiceDetail({ dashData, serviceIdx, kong, onBack, onDe
 
   async function attachExistingCert(type, rawId) {
     const id = (rawId || '').trim();
-    if (!id) { alert('Enter an existing certificate ID.'); return; }
+    if (!id) { showAlert('Enter an existing certificate ID.'); return; }
     const list = type === 'ca' ? dashData.caCerts : dashData.clientCerts;
     const found = list.some((c) => normId(c.id) === normId(id));
-    if (!found && !confirm(`"${id}" wasn't found in the loaded file. Attach it anyway?`)) return;
+    if (!found && !(await askConfirm(`"${id}" wasn't found in the loaded file. Attach it anyway?`))) return;
     await attachCertToService(type, id);
     setAdding(null);
     setNewCertPendingId(null);
@@ -153,7 +154,7 @@ export default function ServiceDetail({ dashData, serviceIdx, kong, onBack, onDe
   }
 
   async function saveNewVariable(key, value) {
-    if (dashData.variables.some((v) => v.key === key)) { alert(`A variable named "${key}" already exists.`); return; }
+    if (dashData.variables.some((v) => v.key === key)) { showAlert(`A variable named "${key}" already exists.`); return; }
     await kong.insertBlockInFile('values', 'kong_services:', `${key}: ${value}`, 'keyval', '');
     setAdding(null);
   }
@@ -504,8 +505,8 @@ function AddCertForm({ type, dashData, hasAnyFileLoaded, onCancel, onSaveNew, on
             <button
               className="btn btn-teal"
               onClick={() => {
-                if (!pem.trim()) return alert('Paste a certificate first.');
-                if (type === 'client' && !key.trim()) return alert('Paste a private key first.');
+                if (!pem.trim()) return showAlert('Paste a certificate first.');
+                if (type === 'client' && !key.trim()) return showAlert('Paste a private key first.');
                 onSaveNew(comment, pem, key);
               }}
             >
@@ -557,7 +558,7 @@ function AddVariableForm({ onCancel, onSave, onPreview }) {
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn btn-teal" onClick={() => (key.trim() ? onSave(key.trim(), value.trim()) : alert('Enter a variable name.'))}>
+        <button className="btn btn-teal" onClick={() => (key.trim() ? onSave(key.trim(), value.trim()) : showAlert('Enter a variable name.'))}>
           + Add Variable
         </button>
         <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>

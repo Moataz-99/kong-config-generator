@@ -5,6 +5,7 @@
 // confirmation and writes through the useKongData hook.
 
 import { normId } from './yaml.js';
+import { askConfirm } from './host.js';
 
 export function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -231,7 +232,7 @@ export async function cascadeDeleteService(dashData, service, kong) {
     caToDelete.length && `${caToDelete.length} CA certificate(s)`,
     clientToDelete.length && `${clientToDelete.length} client certificate(s)`,
   ].filter(Boolean).join(', ');
-  if (!confirm(`Delete ${summary}?\n\nThis cannot be undone (unless you Revert).`)) return false;
+  if (!(await askConfirm(`Delete ${summary}?\n\nThis cannot be undone (unless you Revert).`))) return false;
 
   const cmRanges = [
     entityDeleteRange('service', service),

@@ -9,8 +9,10 @@ charts. It opens the real files, lists every Kong service, shows everything conn
 (routes, plugins, certificates, variables), and lets you create, edit and delete them. Changes are written back into
 the files surgically: only the lines you touched change, and comments, ordering and Helm `{{ }}` expressions survive.
 
-Deliverable: **`dist/index.html`** — one self-contained file (React + CSS inlined, no CDN, no server). Open it in
-Chrome or Edge.
+Deliverables:
+- **`dist/index.html`** — one self-contained file (React + CSS inlined, no CDN, no server). Open it in Chrome or Edge.
+- **`kong-config-generator.vsix`** (repo root) — the same app as a VS Code extension (`vscode-extension/`). Command
+  "Kong Config Generator: Open". Rebuild it with `npm run build:vsix` whenever the app changes, and commit it.
 
 ## The real files
 
@@ -35,6 +37,8 @@ npm run dev        # Vite dev server with hot reload
 npm run build      # → dist/index.html (single file)
 npm run lint       # oxlint (there are known warnings, see below)
 npm run test:smoke -- <path/to/configmap.yaml> <path/to/values-testing.yaml>   # after npm run build
+npm run test:vscode   # VS Code side, after npm run build (fake files by default)
+npm run build:vsix    # dist/index.html + kong-config-generator.vsix
 ```
 
 Building needs **Node 20.19+ or 22.12+** (Vite 8). The tool itself needs no Node — just open `dist/index.html`.
@@ -44,6 +48,10 @@ Building needs **Node 20.19+ or 22.12+** (Vite 8). The tool itself needs no Node
 - **Chrome / Edge:** "📁 Select Project Folder" (File System Access API) → pick Inbound or Outbound → the two files
   are read and every save is written straight back to disk.
 - **Other browsers:** two file inputs. Read-only, changes stay in memory (no download button yet).
+- **VS Code extension:** the app runs in a webview. `src/lib/host.js` detects `acquireVsCodeApi` and sends file
+  reads/writes and dialogs to the extension as messages; `vscode-extension/handler.js` answers them with
+  `vscode.workspace.fs` and `showWarningMessage`. The open folder is used automatically if it contains
+  `helm-configuration/`. Files loaded with Windows line endings are saved with them.
 - "↺ Revert to Original" restores both files to what was first loaded (and writes that back to disk).
 
 ## Layout
@@ -54,7 +62,8 @@ src/lib/yaml.js            line-based YAML helpers, pure JS (extracted from the 
                            patchRawBlock, injectBlock, yamlStr, buildConfigLines, highlightYAML, extractVarRefs…
 src/lib/entities.js        UUIDs (collision-checked), withComment, delete ranges, connection lookups,
                            cascadeDeleteService, expandVarRefs
-src/lib/fileSystem.js      File System Access API wrapper
+src/lib/fileSystem.js      file access: File System Access API in Chrome/Edge, the extension inside VS Code
+src/lib/host.js            browser vs VS Code: callHost() message bridge, askConfirm(), showAlert()
 src/lib/pluginDefaults.js  default config per plugin in the "Add Plugin" pickers
 src/lib/fieldInfo.js       hover tooltip text per field (ⓘ icons)
 src/hooks/useKongData.js   the only state holder for files + parsed data; every write goes through it
@@ -63,6 +72,9 @@ src/components/            ProjectLoader, Dashboard, ServiceDetail, CreateFlow, 
 src/components/forms/      ServiceEditForm, RouteEditForm, PluginEditForm, CertEditForm, VariableEditForm
 src/styles.css             all styles (Vodafone red theme: --teal is #E60000, the name is historical)
 tests/smoke.mjs            Playwright end-to-end test against real files
+tests/fixtures/            FAKE configmap.yaml + values-testing.yaml (make-fixtures.mjs regenerates them)
+vscode-extension/          extension.js (opens the webview), handler.js (answers the app's messages),
+                           package.json, test/bridge.test.mjs; media/index.html is copied from dist/ at package time
 ```
 
 Screens: **Dashboard** (services list with search, per-row route/plugin/cert counts, open, cascade delete; "Other
@@ -95,6 +107,8 @@ service in detail view, the form's output while a form is open.
 10. **useKongData writes read `filesRef.current`**, not the React state, so several writes in a row see each other.
 11. **Keep `<script type="module">`** in `index.html`. Stripping it ran the bundle before `#root` existed (React #299).
 12. No external requests: everything is inlined by `vite-plugin-singlefile`.
+13. **Use `askConfirm` / `showAlert` from `src/lib/host.js`, never `confirm()` / `alert()`.** VS Code webviews block
+    the browser dialogs, so a bare `confirm()` silently returns false there and deletes stop working.
 
 ## Testing
 
@@ -114,6 +128,11 @@ Selector gotchas when writing Playwright checks: `text=✎ Edit` also matches "�
 also matches `paths:`; `text=Cancel` matched an `<option>CancelPaymentPath`; `.card-body` first is the loader card.
 Scope to the card (`page.locator('.card', { has: … })`) or use `getByRole`. Wait for the preview to update before
 reading it.
+
+`npm run test:vscode` runs the real app in Chromium with `acquireVsCodeApi` faked, wired to the real
+`vscode-extension/handler.js` over a stand-in vscode API on temp files (12 checks: open folder found, edit on disk,
+delete asks and Cancel keeps it, notifications, CRLF kept, Revert byte-for-byte). Both tests default to / accept the
+fake files in `tests/fixtures/`.
 
 For parser changes, also check against the real files: counts above, no overlapping ranges, deleting any item keeps
 every other item's comment.
@@ -157,6 +176,8 @@ All 114 Helm references in the configmap use the full `{{ .Values.kong_services.
 - `tests/smoke.mjs` has only been run against fake files shaped like the real ones (the real files can't come into
   a cloud session). Run it against the real inbound/outbound files on the laptop.
 - The File System Access write path (see Known issues) has no automated test.
+- The extension hasn't been run in a real VS Code yet (the cloud session can't download VS Code). Its handler and
+  activation were tested with a stand-in vscode API.
 
 ## Known issues and next ideas
 
