@@ -6,7 +6,10 @@
 // Needs Playwright with Chromium (npm i -D playwright && npx playwright install chromium).
 // It removes window.showDirectoryPicker so the app uses the manual file inputs,
 // then exercises dashboard, detail tabs, edit, create (incremental writes),
-// cascade delete and revert. Counts are derived from the files you pass in.
+// cascade delete and revert. A second part edits one service's route, plugin,
+// certificate and variable, adds a plugin and certificates (new, existing,
+// unknown id), checks blank Retries saves 5 and that cascade delete keeps a
+// certificate another service shares. Targets and counts come from the files.
 import { createRequire } from 'module';
 import path from 'path';
 import fs from 'fs';
@@ -26,8 +29,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const distHtml = path.join(here, '..', 'dist', 'index.html');
 if (!fs.existsSync(distHtml)) { console.error('dist/index.html missing — run npm run build first'); process.exit(2); }
 
-const { parseConfigMap, normalizeYamlText } = await import(pathToFileURL(path.join(here, '..', 'src', 'lib', 'yaml.js')).href);
-const expectedServices = parseConfigMap(normalizeYamlText(fs.readFileSync(cmPath, 'utf8'))).services.length;
+const { parseConfigMap, parseValuesFile, normalizeYamlText, normId, extractVarRefs } = await import(pathToFileURL(path.join(here, '..', 'src', 'lib', 'yaml.js')).href);
+const cmData = parseConfigMap(normalizeYamlText(fs.readFileSync(cmPath, 'utf8')));
+const valuesData = parseValuesFile(normalizeYamlText(fs.readFileSync(valuesPath, 'utf8')));
+const expectedServices = cmData.services.length;
 
 let failures = 0;
 const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`); if (!ok) failures++; };
@@ -37,7 +42,8 @@ const browser = await chromium.launch(launchOpts);
 const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
 const pageErrors = [];
 page.on('pageerror', (e) => pageErrors.push(String(e)));
-page.on('dialog', (d) => d.accept());
+const dialogs = [];
+page.on('dialog', (d) => { dialogs.push(d.message()); d.accept(); });
 await page.addInitScript(() => { delete window.showDirectoryPicker; });
 await page.goto(pathToFileURL(distHtml).href);
 
@@ -115,6 +121,172 @@ await page.locator('.dash-row').first().getByRole('button', { name: 'Open →' }
 await page.getByRole('button', { name: '↺ Revert to Original' }).click();
 await page.waitForTimeout(300);
 check((await shown()) === `${expectedServices} of ${expectedServices} shown`, 'Revert to Original restored every service');
+
+// ── Detail-page edits and adds (each starts from a clean Revert) ──────────────
+// Targets are picked from the files given, so this works on any inbound/outbound pair.
+const search = page.getByPlaceholder('🔎 Search by name, host, or id…');
+const pane = page.locator('#yaml-preview');
+const card = (title) => page.locator('.card', { has: page.locator('.card-title', { hasText: title }) });
+const field = (scope, label) => scope.locator('.field', { has: page.locator('label', { hasText: label }) });
+const tabCount = async (name) => Number((await page.getByRole('button', { name: new RegExp(`^${name} \\(\\d+\\)$`) }).innerText()).match(/\((\d+)\)/)[1]);
+async function openService(id) {
+  if (await page.getByRole('button', { name: '← Back to Dashboard' }).isVisible()) {
+    await page.getByRole('button', { name: '← Back to Dashboard' }).click();
+  }
+  await search.fill(id);
+  await page.locator('.dash-row').first().getByRole('button', { name: 'Open →' }).click();
+  await page.getByRole('button', { name: '✎ Edit Service' }).waitFor();
+}
+async function revert() {
+  await page.getByRole('button', { name: '↺ Revert to Original' }).click();
+  await page.waitForTimeout(300);
+  await search.fill('');
+}
+const waitFor = (loc) => loc.waitFor({ timeout: 5000 }).then(() => true, () => false);
+// after a save the right pane goes back from the form's output to the full service
+const fullPreview = async () => { await waitFor(pane.filter({ hasText: '# ── SERVICE ──' })); return pane.innerText(); };
+// comments aren't part of the full preview; the saved row shows them
+const rowComment = (scope, text) => waitFor(scope.locator('.dash-row-comment', { hasText: text }));
+
+const routeSvc = (sid) => cmData.routes.filter((r) => normId(r.service) === sid);
+const pluginsOf = (sid) => {
+  const rids = new Set(routeSvc(sid).map((r) => normId(r.id)));
+  return cmData.plugins.filter((p) => normId(p.service) === sid || (p.route && rids.has(normId(p.route))));
+};
+const certIdsOf = (s) => [s.client_certificate, ...(s.ca_certificates || [])].map(normId).filter((x) => x && x !== '~');
+const varsOf = (s) => [...extractVarRefs(s.host), ...extractVarRefs(s.path), ...extractVarRefs(s.port)];
+const target = cmData.services.find((s) => routeSvc(normId(s.id)).length && pluginsOf(normId(s.id)).length && varsOf(s).length)
+  || cmData.services.find((s) => routeSvc(normId(s.id)).length) || cmData.services[0];
+const tid = normId(target.id);
+console.log(`\n-- detail-page checks on service "${target.name}" (${tid})`);
+
+// blank Retries saves 5 (same as Create's default)
+await openService(tid);
+await page.getByRole('button', { name: '✎ Edit Service' }).click();
+await field(page, /^Retries/).locator('input').fill('');
+await page.getByRole('button', { name: '💾 Save Changes' }).click();
+await page.waitForTimeout(200);
+check((await card('').filter({ has: page.getByRole('button', { name: '← Back to Dashboard' }) }).innerText()).includes('retries: 5'), 'blank Retries saves 5');
+
+// route edit
+if (routeSvc(tid).length) {
+  await page.getByRole('button', { name: /^Routes \(/ }).click();
+  await card(/^Routes$/).getByRole('button', { name: '✎ Edit', exact: true }).first().click();
+  const rForm = card(/^Routes$/);
+  await field(rForm, /^Comment/).locator('input').fill('smoke route comment');
+  await field(rForm, /^Regex Priority/).locator('input').fill('77');
+  await rForm.getByRole('button', { name: '💾 Save' }).click();
+  const ok = await rowComment(rForm, 'smoke route comment');
+  check(ok && (await fullPreview()).includes('regex_priority: 77'), 'route edit saved (comment + regex_priority: 77)');
+} else check(true, 'route edit skipped — service has no routes');
+
+// plugin edit (disable) and add plugin
+await page.getByRole('button', { name: /^Plugins \(/ }).click();
+const pluginsBefore = await tabCount('Plugins');
+if (pluginsBefore) {
+  const pCard = card(/^Plugins$/);
+  const disabledBefore = (await fullPreview()).split('enabled: false').length;
+  await pCard.getByRole('button', { name: '✎ Edit', exact: true }).first().click();
+  await field(pCard, /^Comment/).locator('input').fill('smoke plugin comment');
+  await pCard.locator('label.toggle').first().click();
+  await pCard.getByRole('button', { name: '💾 Save' }).click();
+  const ok = await rowComment(pCard, 'smoke plugin comment');
+  check(ok && (await fullPreview()).split('enabled: false').length === disabledBefore + 1, 'plugin edit saved (comment + enabled: false)');
+} else check(true, 'plugin edit skipped — service has no plugins');
+await card(/^Plugins$/).getByRole('button', { name: '+ Add Plugin' }).click();
+const addForm = card(/^Plugins$/);
+await field(addForm, /^Plugin$/).locator('select').selectOption({ index: 1 });
+await field(addForm, /^Comment/).locator('input').fill('smoke added plugin');
+await addForm.getByRole('button', { name: '+ Add Plugin' }).click();
+await page.waitForTimeout(300);
+check((await tabCount('Plugins')) === pluginsBefore + 1 && await rowComment(addForm, 'smoke added plugin'), `Add Plugin attached a new plugin (${pluginsBefore} → ${await tabCount('Plugins')})`);
+
+// bad JSON is refused
+await card(/^Plugins$/).getByRole('button', { name: '+ Add Plugin' }).click();
+await field(addForm, /^Plugin$/).locator('select').selectOption({ index: 1 });
+await field(addForm, /^Config/).locator('textarea').fill('{ not json');
+const nDialogs = dialogs.length;
+await addForm.getByRole('button', { name: '+ Add Plugin' }).click();
+await page.waitForTimeout(200);
+check(dialogs.length === nDialogs + 1 && dialogs.at(-1).includes("isn't valid JSON") && (await tabCount('Plugins')) === pluginsBefore + 1, 'Add Plugin refuses invalid JSON config');
+await addForm.getByRole('button', { name: 'Cancel' }).click();
+
+// certificates: add new CA, edit it, attach existing client cert, attach unknown id (asks first)
+await page.getByRole('button', { name: /^Certificates \(/ }).click();
+const certsBefore = await tabCount('Certificates');
+const caCard = card(/^CA Certificates$/);
+await caCard.getByRole('button', { name: '+ Add CA Certificate' }).click();
+await field(caCard, /^Comment/).locator('input').fill('smoke new ca');
+await field(caCard, /^Certificate \(PEM\)/).locator('textarea').fill('-----BEGIN CERTIFICATE-----\nU01PS0UtVEVTVA==\n-----END CERTIFICATE-----');
+await caCard.getByRole('button', { name: '+ Add & Attach' }).click();
+await page.waitForTimeout(300);
+check((await tabCount('Certificates')) === certsBefore + 1 && await rowComment(caCard, 'smoke new ca'), `new CA certificate added and attached (${certsBefore} → ${await tabCount('Certificates')})`);
+check((await fullPreview()).split('# ── ROUTES ──')[0].includes('ca_certificates:'), 'service now lists ca_certificates');
+
+await caCard.locator('.dash-row', { hasText: '# smoke new ca' }).getByRole('button', { name: '✎ Edit', exact: true }).click();
+await field(caCard, /^Comment/).locator('input').fill('smoke edited ca');
+await caCard.getByRole('button', { name: '💾 Save' }).click();
+check(await rowComment(caCard, 'smoke edited ca'), 'certificate edit saved (comment changed)');
+
+const otherClient = valuesData.clientCerts.find((c) => !certIdsOf(target).includes(normId(c.id)));
+if (otherClient) {
+  const before = await tabCount('Certificates');
+  const clCard = card(/^Client Certificates$/);
+  await clCard.getByRole('button', { name: '+ Add Client Certificate' }).click();
+  await field(clCard, /^Mode/).locator('select').selectOption('existing');
+  await field(clCard, /^Existing Certificate ID/).locator('input').fill(normId(otherClient.id));
+  await clCard.getByRole('button', { name: 'Attach' }).click();
+  await page.waitForTimeout(300);
+  check((await tabCount('Certificates')) === before + (target.client_certificate ? 0 : 1)
+    && (await fullPreview()).includes(`client_certificate: ${normId(otherClient.id)}`), 'existing client certificate attached by id');
+} else check(true, 'attach existing client cert skipped — no spare client cert in the values file');
+
+{
+  const clCard = card(/^Client Certificates$/);
+  await clCard.getByRole('button', { name: '+ Add Client Certificate' }).click();
+  await field(clCard, /^Mode/).locator('select').selectOption('existing');
+  await field(clCard, /^Existing Certificate ID/).locator('input').fill('00000000-0000-4000-8000-00000000dead');
+  const n = dialogs.length;
+  await clCard.getByRole('button', { name: 'Attach' }).click();
+  await page.waitForTimeout(300);
+  check(dialogs.length > n && dialogs[n].includes("wasn't found in the loaded file"), 'unknown certificate id asks before attaching');
+}
+
+// variable edit (only variables the service refers to are listed)
+await page.getByRole('button', { name: /^Variables \(/ }).click();
+if (await tabCount('Variables')) {
+  const vCard = card(/^Variables/);
+  const key = await vCard.locator('.dash-row-title').first().innerText();
+  await vCard.getByRole('button', { name: '✎ Edit', exact: true }).first().click();
+  await field(vCard, /^Value/).locator('input').fill('smoke.example.internal');
+  await vCard.getByRole('button', { name: '💾 Save' }).click();
+  await page.waitForTimeout(300);
+  const row = vCard.locator('.dash-row', { hasText: key });
+  check((await row.innerText()).includes('smoke.example.internal'), `variable edit saved (${key})`);
+} else check(true, 'variable edit skipped — service refers to no variables');
+
+// edits must not change the service count
+await revert();
+check((await shown()) === `${expectedServices} of ${expectedServices} shown`, 'Revert after detail edits restores every service');
+
+// cascade delete keeps a certificate another service still uses
+const refs = {};
+cmData.services.forEach((s) => certIdsOf(s).forEach((c) => { refs[c] = (refs[c] || 0) + 1; }));
+const sharer = cmData.services.find((s) => certIdsOf(s).some((c) => refs[c] > 1));
+if (sharer) {
+  const shared = certIdsOf(sharer).find((c) => refs[c] > 1);
+  const other = cmData.services.find((s) => s !== sharer && certIdsOf(s).includes(shared));
+  await openService(normId(other.id));
+  await page.getByRole('button', { name: /^Certificates \(/ }).click();
+  const otherBefore = await tabCount('Certificates');
+  await openService(normId(sharer.id));
+  await page.getByRole('button', { name: '🗑 Delete Service' }).click();
+  await page.waitForTimeout(300);
+  await openService(normId(other.id));
+  await page.getByRole('button', { name: /^Certificates \(/ }).click();
+  check((await tabCount('Certificates')) === otherBefore, `cascade delete kept the shared certificate (${shared.slice(0, 8)}… still on "${other.name}")`);
+  await revert();
+} else check(true, 'shared-certificate cascade check skipped — no certificate is used by two services');
 
 check(pageErrors.length === 0, `no page errors${pageErrors.length ? ': ' + pageErrors.join(' | ') : ''}`);
 await browser.close();
